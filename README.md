@@ -621,7 +621,23 @@ print(kruskal_result)
 
 # Pairwise Wilcoxon post-hoc test
 pairwise_result <- pairwise.wilcox.test(pi_all$PI, pi_all$pop, p.adjust.method = "bonferroni")
+
 print(pairwise_result)
+
+
+
+######TREEMIX
+#####treemIX
+####IN BASH:
+  populations -V ./final.recode.vcf -O ./ -M ./Amphi.txt --treemix
+gzip final.recode.p.treemix
+module load Miniconda3
+for i in {1..10}; do treemix -i final.recode.p.treemix.gz  -m ${i} -bootstrap -k 1000 -o BMSB_${i} > treemix_${i}_log ; done
+#####in R
+source("plotting_funcs.R") 
+plot_tree("BMSB_8")
+plot_tree("BMSB_3")
+plot_tree("BMSB_10")
 
 
 
