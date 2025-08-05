@@ -397,8 +397,8 @@ library(adegenet)
 library(pegas)
 
 # Define file paths
-vcf_file <- "final.recode.vcf"          # Your input VCF file
-popmap_file <- "Amphi.txt"            # Two-column file: sampleID, population
+vcf_file <- "final.recode.vcf"      # Your input VCF file
+popmap_file <- "Amphi.txt"          # Two-column file: sampleID, population
 
 # Read the VCF
 vcf <- read.vcfR(vcf_file)
@@ -414,55 +414,11 @@ inds <- indNames(gen)
 pop_assignments <- popmap$pop[match(inds, popmap$sample)]
 gen@pop <- as.factor(pop_assignments)
 
+# Set layout: 2 rows × 2 columns
+par(mfrow = c(2, 2), mar = c(4, 4, 2.5, 1))  # adjust margins if needed
+
 # Function to compute and plot folded SFS
 compute_folded_sfs <- function(subgen, pop_name) {
-  # Get allele count matrix
-  ac <- tab(subgen, NA.method = "mean")
-  
-  # Skip if no valid genotypes
-  if (all(is.na(ac)) || nrow(ac) == 0) {
-    message(paste("Skipping", pop_name, "- no valid genotypes"))
-    return(NULL)
-  }
-  
-  # Compute Minor Allele Frequencies (MAF)
-  maf <- apply(ac, 2, function(x) {
-    if (all(is.na(x))) return(NA)
-    af <- mean(x, na.rm = TRUE) / 2  # assumes diploid
-    min(af, 1 - af)
-  })
-  
-  # Clean up the MAF vector
-  maf <- maf[!is.na(maf) & maf >= 0 & maf <= 0.5]
-  message(paste(pop_name, "- valid SNPs:", length(maf)))
-  
-  if (length(maf) < 5) {
-    message(paste("Skipping", pop_name, "- too few SNPs (", length(maf), ")"))
-    return(NULL)
-  }
-  
-  # Plot histogram
-  hist(maf,
-       breaks = seq(0, 0.5, by = 0.05),
-       main = paste("Folded SFS -", pop_name),
-       xlab = "Minor Allele Frequency",
-       ylab = "SNP Count",
-       col = "skyblue",
-       border = "gray")
-}
-
-# Loop through each population and compute SFS
-unique_pops <- unique(pop(gen))
-for (p in unique_pops) {
-  subgen <- gen[pop(gen) == p]
-  compute_folded_sfs(subgen, as.character(p))
-}
-
-
-
-# Re-define the function with added message for SNP count
-compute_folded_sfs <- function(subgen, pop_name) {
-  # Get allele count matrix
   ac <- tab(subgen, NA.method = "mean")
   
   if (all(is.na(ac)) || nrow(ac) == 0) {
@@ -470,7 +426,6 @@ compute_folded_sfs <- function(subgen, pop_name) {
     return(NULL)
   }
   
-  # Calculate folded MAF
   maf <- apply(ac, 2, function(x) {
     if (all(is.na(x))) return(NA)
     af <- mean(x, na.rm = TRUE) / 2
@@ -482,7 +437,7 @@ compute_folded_sfs <- function(subgen, pop_name) {
   message(paste(pop_name, "- valid SNPs:", length(maf)))
   
   if (length(maf) < 5) {
-    message(paste("Skipping", pop_name, "- too few SNPs (", length(maf), ")"))
+    message(paste("Skipping", pop_name, "- too few SNPs"))
     return(NULL)
   }
   
@@ -495,15 +450,21 @@ compute_folded_sfs <- function(subgen, pop_name) {
        border = "gray")
 }
 
-# Apply to all populations
+# Loop through each population and plot SFS
 unique_pops <- unique(pop(gen))
 for (p in unique_pops) {
   subgen <- gen[pop(gen) == p]
   compute_folded_sfs(subgen, as.character(p))
 }
 
+# Optional: reset layout
+par(mfrow = c(1, 1))
 
-######################### Tajima from ELI
+
+
+
+
+######################### Tajima D
 
 ##Plotting Sliding windows analysis - TajimaD
 library(ggplot2)
@@ -601,6 +562,66 @@ cat("95th Percentile:", quant_vals[2], "\n")
 # 6. Min and Max (optional)
 cat("Min:", min(KGCFTajimaD$TajimaD), "\n")
 cat("Max:", max(KGCFTajimaD$TajimaD), "\n")
+
+
+
+###### Nucleotide diversity
+
+#########IN bash
+vcftools --vcf final.recode.vcf --keep pop1.txt --window-pi 10000 --window-pi-step 10000 --out pop1_windowed_pi
+##Repeat for pop2 and pop3 and pop4 
+
+KGCF_pi <- fread("KGCF.windowed.pi", header = TRUE)
+LICF_pi <- fread("LICF.windowed.pi", header = TRUE)
+SICF_pi <- fread("SICF.windowed.pi", header = TRUE)
+DICF_pi <- fread("DICF.windowed.pi", header = TRUE)
+
+# Prepare each dataset: remove NA, keep only 'PI' column and label population
+KGCF_pi_clean <- KGCF_pi %>%
+  filter(!is.na(PI)) %>%
+  select(PI) %>%
+  mutate(pop = "KGCF")
+
+LICF_pi_clean <- LICF_pi %>%
+  filter(!is.na(PI)) %>%
+  select(PI) %>%
+  mutate(pop = "LICF")
+
+SICF_pi_clean <- SICF_pi %>%
+  filter(!is.na(PI)) %>%
+  select(PI) %>%
+  mutate(pop = "SICF")
+
+DICF_pi_clean <- DICF_pi %>%
+  filter(!is.na(PI)) %>%
+  select(PI) %>%
+  mutate(pop = "DICF")
+
+# Combine all into one dataframe
+pi_all <- rbind(KGCF_pi_clean, LICF_pi_clean, SICF_pi_clean, DICF_pi_clean)
+
+# Confirm data
+table(pi_all$pop)
+
+# Violin + boxplot
+ggplot(pi_all, aes(x = pop, y = PI, fill = pop)) +
+  geom_violin(trim = FALSE, color = "black") +
+  geom_boxplot(width = 0.1, fill = "white") +
+  scale_fill_viridis(discrete = TRUE, option = "D") +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Nucleotide Diversity (π) Across Amphipod Populations",
+    x = "Population",
+    y = expression(pi)
+  )
+
+# Kruskal-Wallis test
+kruskal_result <- kruskal.test(PI ~ pop, data = pi_all)
+print(kruskal_result)
+
+# Pairwise Wilcoxon post-hoc test
+pairwise_result <- pairwise.wilcox.test(pi_all$PI, pi_all$pop, p.adjust.method = "bonferroni")
+print(pairwise_result)
 
 
 
